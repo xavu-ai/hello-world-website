@@ -7,7 +7,7 @@ WORKDIR /app
 COPY backend/package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
 # Stage 2: Production stage
 FROM node:20-alpine AS production
@@ -22,8 +22,8 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application files
-COPY --chown=nodejs:nodejs backend/index.js ./
-COPY --chown=nodejs:nodejs public/ ./public/
+COPY --chown=nodejs:nodejs backend/server.js ./
+COPY --chown=nodejs:nodejs backend/public/ ./public/
 
 # Set environment
 ENV NODE_ENV=production
@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 USER nodejs
 
 # Start server
-CMD ["node", "index.js"]
+CMD ["node", "server.js"]
