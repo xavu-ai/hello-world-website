@@ -50,6 +50,13 @@ const serveFile = async (filePath, res) => {
 const requestListener = async (req, res) => {
   const url = req.url.split('?')[0];
 
+  // Health check endpoint
+  if (url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok' }));
+    return;
+  }
+
   // Root path - serve index.html
   if (url === '/') {
     const indexPath = join(PUBLIC_DIR, 'index.html');
