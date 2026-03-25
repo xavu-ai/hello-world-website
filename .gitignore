@@ -88,3 +88,5 @@ tmp/
 temp/
 .cache/
 coverage/
+test-results/
+playwright-report/
