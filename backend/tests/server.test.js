@@ -1,84 +1,73 @@
-import request from 'supertest';
-import express from 'express';
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert';
+import http from 'node:http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Create a test app instance
-const createApp = () => {
-  const app = express();
-  const publicPath = join(__dirname, '..', '..', 'public');
-  
-  app.use(express.static(publicPath));
-  
-  app.get('/', (req, res) => {
-    res.sendFile(join(publicPath, 'index.html'));
+// Start the actual server
+process.chdir(join(__dirname, '..'));
+const { default: server } = await import('../server.js');
+
+const makeRequest = (path) => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'localhost',
+      port: server.address().port,
+      path: path,
+      method: 'GET',
+    };
+
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode,
+          headers: res.headers,
+          body: data,
+        });
+      });
+    });
+
+    req.on('error', reject);
+    req.end();
   });
-  
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-  
-  app.use((req, res) => {
-    res.status(404).send('Not Found');
-  });
-  
-  return app;
 };
 
-describe('Hello World Server', () => {
-  let server;
-  let app;
-
-  beforeAll((done) => {
-    app = createApp();
-    server = app.listen(0, done);
+describe('Static File Server', () => {
+  after(() => {
+    server.close();
   });
 
-  afterAll((done) => {
-    server.close(done);
+  it('should serve index.html at root path', async () => {
+    const res = await makeRequest('/');
+    assert.strictEqual(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('text/html'));
+    assert.ok(res.body.includes('Hello World'));
   });
 
-  describe('GET /', () => {
-    it('should serve index.html at root path', async () => {
-      const res = await request(server).get('/');
-      expect(res.status).toBe(200);
-      expect(res.headers['content-type']).toContain('text/html');
-      expect(res.text).toContain('Hello World');
-    });
+  it('should serve CSS file with correct MIME type', async () => {
+    const res = await makeRequest('/css/styles.css');
+    assert.strictEqual(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('text/css'));
   });
 
-  describe('GET /styles.css', () => {
-    it('should serve CSS file with correct Content-Type', async () => {
-      const res = await request(server).get('/styles.css');
-      expect(res.status).toBe(200);
-      expect(res.headers['content-type']).toContain('text/css');
-    });
+  it('should serve JS file with correct MIME type', async () => {
+    const res = await makeRequest('/js/app.js');
+    assert.strictEqual(res.statusCode, 200);
+    assert.ok(res.headers['content-type'].includes('application/javascript'));
   });
 
-  describe('GET /app.js', () => {
-    it('should serve JS file with correct Content-Type', async () => {
-      const res = await request(server).get('/app.js');
-      expect(res.status).toBe(200);
-      expect(res.headers['content-type']).toContain('application/javascript');
-    });
+  it('should return 404 for missing files', async () => {
+    const res = await makeRequest('/nonexistent.html');
+    assert.strictEqual(res.statusCode, 404);
   });
 
-  describe('GET /health', () => {
-    it('should return health check status', async () => {
-      const res = await request(server).get('/health');
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('status', 'ok');
-      expect(res.body).toHaveProperty('timestamp');
-    });
-  });
-
-  describe('GET /nonexistent', () => {
-    it('should return 404 for non-existent routes', async () => {
-      const res = await request(server).get('/nonexistent');
-      expect(res.status).toBe(404);
-    });
+  it('should return 403 for directory access attempts', async () => {
+    const res = await makeRequest('/css/');
+    assert.strictEqual(res.statusCode, 403);
   });
 });
