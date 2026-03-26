@@ -78,20 +78,21 @@ describe('Static File Server Integration Tests', () => {
   });
   
   describe('GET /../package.json', () => {
-    test('returns 400 for path traversal attempt', async () => {
+    test('returns 403 for path traversal attempt', async () => {
       const response = await request(server).get('/../package.json');
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(403);
       expect(response.body.error.name).toBe('PathTraversalError');
       expect(response.body.error.correlationId).toBeDefined();
     });
   });
   
   describe('GET /health', () => {
-    test('returns valid JSON with healthy status', async () => {
+    test('returns valid JSON with ok status', async () => {
       const response = await request(server).get('/health');
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toMatch(/application\/json/);
-      expect(response.body.status).toBe('healthy');
+      expect(response.body.status).toBe('ok');
+      expect(response.body.version).toBe('1.0.0');
       expect(response.body.timestamp).toBeDefined();
       expect(() => new Date(response.body.timestamp)).not.toThrow();
     });
