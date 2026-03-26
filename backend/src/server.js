@@ -114,16 +114,21 @@ app.get('/', async (req, res, next) => {
 });
 
 // SPA fallback - serve index.html for client-side routing
-app.get('*', (req, res, next) => {
-  const indexPath = path.join(config.staticDir, 'index.html');
-  
-  res.sendFile(indexPath, (err) => {
-    if (err && err.code === 'ENOENT') {
+app.get('*', async (req, res, next) => {
+  try {
+    const indexPath = path.join(config.staticDir, 'index.html');
+    
+    // Check if index.html exists using async fs
+    await fs.access(indexPath);
+    
+    res.sendFile(indexPath);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
       next(new NotFoundError('index.html not found'));
-    } else if (err) {
+    } else {
       next(err);
     }
-  });
+  }
 });
 
 // Centralized error handler (must be last)

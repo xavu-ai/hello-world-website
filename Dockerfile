@@ -22,12 +22,13 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application files
-COPY --chown=nodejs:nodejs backend/server.js ./
-COPY --chown=nodejs:nodejs backend/public/ ./public/
+COPY --chown=nodejs:nodejs backend/src/ ./src/
+COPY --chown=nodejs:nodejs backend/static/ ./public/
 
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV STATIC_DIR=/app/public
 
 # Expose port
 EXPOSE 3000
@@ -40,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 USER nodejs
 
 # Start server
-CMD ["node", "server.js"]
+CMD ["node", "src/server.js"]
