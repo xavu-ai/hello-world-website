@@ -1,17 +1,20 @@
 const morgan = require('morgan');
-const config = require('../config');
+const { config } = require('../config');
 
+/**
+ * Morgan logging middleware
+ * Logs HTTP requests with correlation ID
+ */
 const logger = morgan((tokens, req, res) => {
   const correlationId = req.correlationId || '-';
-  return JSON.stringify({
-    time: tokens.date(req, res, 'iso'),
-    method: tokens.method(req, res),
-    url: tokens.url(req, res),
-    status: tokens.status(req, res),
-    contentLength: tokens.res(req, res, 'content-length'),
-    responseTime: tokens['response-time'](req, res),
-    correlationId
-  });
+  return [
+    `[${correlationId}]`,
+    tokens.method(req, res),
+    tokens.url(req, res),
+    tokens.status(req, res),
+    tokens['response-time'](req, res),
+    'ms'
+  ].join(' ');
 });
 
-module.exports = logger;
+module.exports = { logger };
