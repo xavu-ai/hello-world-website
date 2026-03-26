@@ -1,44 +1,48 @@
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const { resolve } = require('path');
-const config = require('../config');
+const path = require('path');
 
-const securityHeaders = helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", 'data:'],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-});
-
-const limiterConfig = {
-  windowMs: config.rateLimitWindowMs,
-  max: config.rateLimitMax,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too Many Requests' },
-};
-
-const rateLimitMiddleware = rateLimit(limiterConfig);
-
-const pathTraversalMiddleware = (req, res, next) => {
-  const decodedPath = decodeURIComponent(req.path);
-  const requestedPath = decodedPath.replace(/^\//, '');
-  const resolvedPath = resolve(config.staticPath, requestedPath);
-
-  if (!resolvedPath.startsWith(config.staticPath)) {
-    return res.status(403).json({ error: 'Forbidden', correlationId: req.correlationId });
+class PathTraversalError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'PathTraversalError';
+    this.statusCode = 400;
   }
-  next();
-};
+}
 
-module.exports = {
-  securityHeaders,
-  rateLimitMiddleware,
-  pathTraversalMiddleware,
-  limiterConfig
-};
+/**
+ * Middleware to prevent path traversal attacks
+ * Must be registered BEFORE express.static
+ */
+function pathTraversalMiddleware(req, res, next) {
+  const requestedPath = req.params.staticPath;
+  
+  // Skip if no staticPath parameter (e.g., root path /)
+  if (!requestedPath) {
+    return next();
+  }
+  
+  // Check for null bytes
+  if (requestedPath.includes('\0') || requestedPath.includes('\x00')) {
+    return next(new PathTraversalError('Invalid path: null bytes not allowed'));
+  }
+  
+  // Check for absolute paths
+  if (path.isAbsolute(requestedPath)) {
+    return next(new PathTraversalError('Invalid path: absolute paths not allowed'));
+  }
+  
+  // Normalize and check for traversal attempts
+  const normalized = path.normalize(requestedPath);
+  if (normalized.includes('..')) {
+    return next(new PathTraversalError('Invalid path: traversal detected'));
+  }
+  
+  // Additional check: ensure no decoded traversal
+  const decoded = decodeURIComponent(requestedPath);
+  if (decoded !== requestedPath && decoded.includes('..')) {
+    return next(new PathTraversalError('Invalid path: traversal detected'));
+  }
+  
+  next();
+}
+
+module.exports = { pathTraversalMiddleware, PathTraversalError };

@@ -1,49 +1,148 @@
 const express = require('express');
-const { join } = require('path');
-const { promises: fs } = require('fs');
+const helmet = require('helmet');
 const compression = require('compression');
+const morgan = require('morgan');
+const path = require('path');
+const fs = require('fs').promises;
 
-const config = require('./config');
-const logger = require('./utils/logger');
-const correlationMiddleware = require('./middleware/correlation');
-const { securityHeaders, rateLimitMiddleware, pathTraversalMiddleware } = require('./middleware/security');
-const { errorHandler } = require('./middleware/errorHandler');
+const { config, validateConfig } = require('./config');
+const { pathTraversalMiddleware, PathTraversalError } = require('./middleware/security');
+const { errorHandler, correlationIdMiddleware, NotFoundError } = require('./middleware/errorHandler');
 const healthRouter = require('./routes/health');
+
+// Validate configuration
+validateConfig();
 
 const app = express();
 
-app.use(correlationMiddleware);
-app.use(logger);
-app.use(securityHeaders);
-app.use(compression());
-app.use(rateLimitMiddleware);
-app.use(pathTraversalMiddleware);
+// Security headers
+app.use(helmet());
 
-app.use('/static', express.static(config.staticPath, {
-  setHeaders: (res, filePath) => {
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-  }
+// Correlation ID for request tracking
+app.use(correlationIdMiddleware);
+
+// HTTP logging
+app.use(morgan(config.logLevel, {
+  skip: (req) => req.url === '/health'
 }));
 
-const spaFallbackMiddleware = async (req, res, next) => {
-  if (req.method !== 'GET') return next();
+// Compression
+app.use(compression());
+
+// Parse URL-encoded bodies (for form submissions)
+app.use(express.urlencoded({ extended: true }));
+
+// Health check endpoint
+app.use(healthRouter);
+
+// Static file serving with path traversal protection
+// Path traversal middleware must be registered BEFORE express.static
+// for routes with :staticPath parameter
+app.get('/:staticPath', pathTraversalMiddleware, async (req, res, next) => {
   try {
-    const indexPath = join(config.staticPath, 'index.html');
-    await fs.access(indexPath);
-    res.sendFile(indexPath);
-  } catch {
-    next();
+    const requestedFile = req.params.staticPath;
+    const filePath = path.join(config.staticDir, requestedFile);
+    
+    // Verify the resolved path is within static directory
+    const resolvedPath = path.resolve(filePath);
+    const staticDirResolved = path.resolve(config.staticDir);
+    
+    if (!resolvedPath.startsWith(staticDirResolved)) {
+      throw new PathTraversalError('Invalid path: outside allowed directory');
+    }
+    
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch {
+      throw new NotFoundError(`File not found: ${requestedFile}`);
+    }
+    
+    // Serve the file
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
   }
-};
-
-app.use(spaFallbackMiddleware);
-
-app.use('/', healthRouter);
-
-app.use(errorHandler);
-
-const server = app.listen(config.port, config.host, () => {
-  console.log(`Server running at http://${config.host}:${config.port}`);
 });
 
-module.exports = { app, server };
+// Path traversal protection for all routes (catches paths that don't match /:staticPath)
+app.get('*', (req, res, next) => {
+  const urlPath = req.path;
+  
+  // Skip check for root path
+  if (urlPath === '/') {
+    return next();
+  }
+  
+  // Check for null bytes
+  if (urlPath.includes('\0') || urlPath.includes('\x00')) {
+    return next(new PathTraversalError('Invalid path: null bytes not allowed'));
+  }
+  
+  // Check for absolute paths (but allow /)
+  if (path.isAbsolute(urlPath) && urlPath !== '/') {
+    return next(new PathTraversalError('Invalid path: absolute paths not allowed'));
+  }
+  
+  // Check for traversal attempts (including encoded)
+  const normalized = path.normalize(urlPath);
+  const decoded = decodeURIComponent(urlPath);
+  const decodedNormalized = path.normalize(decoded);
+  
+  if (normalized.includes('..') || decodedNormalized.includes('..')) {
+    return next(new PathTraversalError('Invalid path: traversal detected'));
+  }
+  
+  next();
+});
+
+// Root path - serve index.html (SPA fallback)
+app.get('/', async (req, res, next) => {
+  try {
+    const indexPath = path.join(config.staticDir, 'index.html');
+    
+    try {
+      await fs.access(indexPath);
+    } catch {
+      throw new NotFoundError('index.html not found');
+    }
+    
+    res.sendFile(indexPath);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// SPA fallback - serve index.html for client-side routing
+app.get('*', (req, res, next) => {
+  const indexPath = path.join(config.staticDir, 'index.html');
+  
+  res.sendFile(indexPath, (err) => {
+    if (err && err.code === 'ENOENT') {
+      next(new NotFoundError('index.html not found'));
+    } else if (err) {
+      next(err);
+    }
+  });
+});
+
+// Centralized error handler (must be last)
+app.use(errorHandler);
+
+// Start server
+const server = app.listen(config.port, () => {
+  console.log(`Server running on port ${config.port}`);
+  console.log(`Environment: ${config.env}`);
+  console.log(`Static directory: ${config.staticDir}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+module.exports = app;

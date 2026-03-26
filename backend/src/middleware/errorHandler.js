@@ -1,60 +1,72 @@
-const logger = require('../utils/logger');
-
-class PathTraversalError extends Error {
-  constructor(message = 'Forbidden') {
-    super(message);
-    this.name = 'PathTraversalError';
-    this.status = 403;
-  }
-}
+const { config } = require('../config');
 
 class NotFoundError extends Error {
-  constructor(message = 'Not Found') {
+  constructor(message) {
     super(message);
     this.name = 'NotFoundError';
-    this.status = 404;
+    this.statusCode = 404;
   }
 }
 
-class ValidationError extends Error {
-  constructor(message = 'Bad Request') {
+class InternalError extends Error {
+  constructor(message) {
     super(message);
-    this.name = 'ValidationError';
-    this.status = 400;
+    this.name = 'InternalError';
+    this.statusCode = 500;
   }
 }
 
-class RateLimitError extends Error {
-  constructor(message = 'Too Many Requests') {
-    super(message);
-    this.name = 'RateLimitError';
-    this.status = 429;
+/**
+ * Correlation ID middleware
+ * Generates unique IDs for request tracking
+ */
+function correlationIdMiddleware(req, res, next) {
+  const header = config.correlationIdHeader;
+  const existingId = req.get(header);
+  
+  if (existingId) {
+    req.correlationId = existingId;
+  } else {
+    const { v4: uuidv4 } = require('uuid');
+    req.correlationId = uuidv4();
   }
+  
+  res.setHeader(header, req.correlationId);
+  next();
 }
 
-class InternalServerError extends Error {
-  constructor(message = 'Internal Server Error') {
-    super(message);
-    this.name = 'InternalServerError';
-    this.status = 500;
+/**
+ * Centralized error handler
+ */
+function errorHandler(err, req, res, _next) {
+  const correlationId = req.correlationId || 'unknown';
+  
+  // Log error with correlation ID
+  console.error(`[${correlationId}] ${err.name}: ${err.message}`);
+  
+  // Determine status code
+  const statusCode = err.statusCode || 500;
+  
+  // Build error response
+  const errorResponse = {
+    error: {
+      name: err.name || 'InternalError',
+      message: err.message || 'An unexpected error occurred',
+      correlationId
+    }
+  };
+  
+  // Include stack trace in development
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.error.stack = err.stack;
   }
+  
+  res.status(statusCode).json(errorResponse);
 }
 
-const errorHandler = (err, req, res, next) => {
-  const correlationId = req.correlationId;
-  logger.error({ err, correlationId });
-  const status = err.status || 500;
-  res.status(status).json({
-    error: err.message || 'Internal Server Error',
-    correlationId
-  });
-};
-
-module.exports = {
-  errorHandler,
-  PathTraversalError,
+module.exports = { 
+  errorHandler, 
+  correlationIdMiddleware,
   NotFoundError,
-  ValidationError,
-  RateLimitError,
-  InternalServerError
+  InternalError
 };

@@ -1,14 +1,53 @@
 const path = require('path');
+const fs = require('fs');
 
+const env = process.env.NODE_ENV || 'development';
+
+// Load environment variables
+try {
+  require('dotenv-flow').config({
+    path: path.resolve(__dirname, '../..'),
+    defaultEnv: env
+  });
+} catch (err) {
+  // dotenv-flow not critical, env vars may come from container
+}
+
+// Configuration with validation
 const config = {
-  env: process.env.NODE_ENV || 'development',
+  env,
   port: parseInt(process.env.PORT || '3000', 10),
-  host: process.env.HOST || '0.0.0.0',
-  staticDir: process.env.STATIC_DIR || 'static',
-  logLevel: process.env.LOG_LEVEL || 'info',
-  rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
-  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
-  staticPath: path.resolve(__dirname, '../../static')
+  staticDir: process.env.STATIC_DIR || path.resolve(__dirname, '../../public'),
+  logLevel: process.env.LOG_LEVEL || 'combined',
+  correlationIdHeader: 'X-Request-ID'
 };
 
-module.exports = config;
+// Validate required configuration
+function validateConfig() {
+  // Skip port validation in test environment (uses random ports)
+  if (env !== 'test') {
+    const required = [];
+    
+    if (!Number.isFinite(config.port) || config.port < 1 || config.port > 65535) {
+      required.push('PORT must be a valid port number (1-65535)');
+    }
+    
+    if (required.length > 0) {
+      throw new Error(`Configuration errors:\n${required.join('\n')}`);
+    }
+  }
+  
+  // Verify static directory exists (warning only in test)
+  if (!fs.existsSync(config.staticDir)) {
+    console.warn(`Warning: Static directory does not exist: ${config.staticDir}`);
+  }
+  
+  return config;
+}
+
+// Validate on module load in non-test environment
+if (env !== 'test') {
+  validateConfig();
+}
+
+module.exports = { config, validateConfig };
