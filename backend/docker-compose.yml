@@ -1,22 +1,15 @@
-version: "3.8"
-
+version: '3.8'
 services:
-  web:
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+      - "3000:3000"
     environment:
-      - PORT=${PORT:-8000}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - STATIC_DIR=static
-    volumes:
-      - ./static:/app/static:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
+      NODE_ENV: production
+      PORT: 3000
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
     restart: unless-stopped
