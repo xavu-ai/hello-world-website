@@ -12,7 +12,10 @@ const healthRouter = require('./routes/health');
 
 const app = express();
 
-// Validate configuration and start server
+// Export app immediately for testing
+module.exports = app;
+
+// Validate configuration and start server (async setup)
 (async () => {
   try {
     await validateConfig();
@@ -155,6 +158,4 @@ const app = express();
       process.exit(0);
     });
   });
-
-  module.exports = app;
 })();
