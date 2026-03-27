@@ -7,15 +7,30 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Start the actual server
 process.chdir(join(__dirname, '..'));
+
+// Import the server module - it starts listening when loaded
 const { default: server } = await import('../server.js');
+
+// Wait for server to be ready before running tests
+const waitForServer = () => new Promise((resolve) => {
+  if (server.address() !== null) {
+    resolve();
+  } else {
+    server.once('listening', resolve);
+  }
+});
 
 const makeRequest = (path) => {
   return new Promise((resolve, reject) => {
+    const addr = server.address();
+    if (!addr) {
+      reject(new Error('Server not ready'));
+      return;
+    }
     const options = {
       hostname: 'localhost',
-      port: server.address().port,
+      port: addr.port,
       path: path,
       method: 'GET',
     };
@@ -38,6 +53,11 @@ const makeRequest = (path) => {
 };
 
 describe('Static File Server', () => {
+  before(async () => {
+    // Ensure server is ready before any test runs
+    await waitForServer();
+  });
+
   after(() => {
     server.close();
   });
