@@ -6,7 +6,7 @@ const { once } = require('events');
 // Set test environment before requiring app
 process.env.NODE_ENV = 'test';
 process.env.PORT = '0'; // Use random available port
-process.env.STATIC_DIR = path.join(__dirname, 'fixtures/public');
+process.env.STATIC_DIR = path.join(__dirname, 'serverFixtures/public');
 process.env.RATE_LIMIT_WINDOW_MS = '60000'; // 1 minute for faster testing
 process.env.RATE_LIMIT_MAX = '100'; // Default high limit for most tests
 
