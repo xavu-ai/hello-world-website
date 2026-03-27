@@ -1,5 +1,5 @@
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 
 const env = process.env.NODE_ENV || 'development';
 
@@ -19,11 +19,16 @@ const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   staticDir: process.env.STATIC_DIR || path.resolve(__dirname, '../../public'),
   logLevel: process.env.LOG_LEVEL || 'combined',
-  correlationIdHeader: 'X-Request-ID'
+  correlationIdHeader: 'X-Request-ID',
+  // Rate limiting from env
+  rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
+  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+  // CORS
+  corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : '*'
 };
 
 // Validate required configuration
-function validateConfig() {
+async function validateConfig() {
   // Skip port validation in test environment (uses random ports)
   if (env !== 'test') {
     const required = [];
@@ -38,16 +43,13 @@ function validateConfig() {
   }
   
   // Verify static directory exists (warning only in test)
-  if (!fs.existsSync(config.staticDir)) {
+  try {
+    await fs.access(config.staticDir);
+  } catch {
     console.warn(`Warning: Static directory does not exist: ${config.staticDir}`);
   }
   
   return config;
-}
-
-// Validate on module load in non-test environment
-if (env !== 'test') {
-  validateConfig();
 }
 
 module.exports = { config, validateConfig };

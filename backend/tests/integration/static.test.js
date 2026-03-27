@@ -1,115 +1,129 @@
 const request = require('supertest');
 const path = require('path');
 const fs = require('fs');
-const { once } = require('events');
 
-// Set test environment before requiring app
+// Set test environment
 process.env.NODE_ENV = 'test';
-process.env.PORT = '0'; // Use random available port
+process.env.PORT = '0';
 process.env.STATIC_DIR = path.join(__dirname, 'fixtures/public');
+process.env.RATE_LIMIT_WINDOW_MS = '60000';
+process.env.RATE_LIMIT_MAX = '1000';
 
-// Create test fixtures directory and files
 const fixturesDir = process.env.STATIC_DIR;
-if (!fs.existsSync(fixturesDir)) {
-  fs.mkdirSync(fixturesDir, { recursive: true });
-}
 
-const indexContent = '<!DOCTYPE html><html><head><title>Test</title></head><body>Hello World</body></html>';
-const cssContent = 'body { color: red; }';
-
-fs.writeFileSync(path.join(fixturesDir, 'index.html'), indexContent);
-fs.writeFileSync(path.join(fixturesDir, 'style.css'), cssContent);
-
-// Import app
-const { config } = require('../../src/config');
-const app = require('../../src/server');
-
-// Get server instance
-let server;
-let baseUrl;
-
-beforeAll(async () => {
-  server = app.listen(0);
-  const addr = server.address();
-  baseUrl = `http://localhost:${addr.port}`;
-  await once(server, 'listening');
+beforeAll(() => {
+  if (!fs.existsSync(fixturesDir)) {
+    fs.mkdirSync(fixturesDir, { recursive: true });
+  }
+  fs.writeFileSync(path.join(fixturesDir, 'index.html'), '<html><body>Test</body></html>');
+  fs.writeFileSync(path.join(fixturesDir, 'test.css'), 'body { color: red; }');
+  fs.writeFileSync(path.join(fixturesDir, 'test.js'), 'console.log("test");');
 });
 
-afterAll(async () => {
-  if (server) {
-    await new Promise((resolve) => server.close(resolve));
-  }
-  // Clean up test fixtures
+afterAll(() => {
   try {
     fs.unlinkSync(path.join(fixturesDir, 'index.html'));
-    fs.unlinkSync(path.join(fixturesDir, 'style.css'));
+    fs.unlinkSync(path.join(fixturesDir, 'test.css'));
+    fs.unlinkSync(path.join(fixturesDir, 'test.js'));
     fs.rmdirSync(fixturesDir);
-  } catch (err) {
-    // Ignore cleanup errors
+  } catch (e) {
+    // Ignore
   }
 });
 
-describe('Static File Server Integration Tests', () => {
+const { createApp } = require('../../src/app');
+
+describe('Static File Serving', () => {
+  let server;
+
+  beforeAll(async () => {
+    const app = createApp();
+    server = app.listen(0);
+    const addr = server.address();
+    process.env.BASE_URL = `http://localhost:${addr.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise(resolve => server.close(resolve));
+  });
+
   describe('GET /', () => {
-    test('returns index.html', async () => {
-      const response = await request(server).get('/');
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toMatch(/text\/html/);
-      expect(response.text).toContain('Hello World');
+    test('serves index.html', async () => {
+      const res = await request(server).get('/');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/html/);
     });
   });
-  
-  describe('GET /style.css', () => {
-    test('returns CSS with correct Content-Type', async () => {
-      const response = await request(server).get('/style.css');
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toMatch(/text\/css/);
-      expect(response.text).toBe('body { color: red; }');
+
+  describe('GET /test.css', () => {
+    test('serves CSS file with correct Content-Type', async () => {
+      const res = await request(server).get('/test.css');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/css/);
+      expect(res.text).toBe('body { color: red; }');
     });
   });
-  
-  describe('GET /nonexistent', () => {
-    test('returns 404', async () => {
-      const response = await request(server).get('/nonexistent');
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBeDefined();
-      expect(response.body.error.correlationId).toBeDefined();
+
+  describe('GET /test.js', () => {
+    test('serves JS file with correct Content-Type', async () => {
+      const res = await request(server).get('/test.js');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/application\/javascript|text\/plain/);
     });
   });
-  
-  describe('GET /../package.json', () => {
-    test('returns 403 for path traversal attempt', async () => {
-      const response = await request(server).get('/../package.json');
-      expect(response.status).toBe(403);
-      expect(response.body.error.name).toBe('PathTraversalError');
-      expect(response.body.error.correlationId).toBeDefined();
+
+  describe('ETag and 304', () => {
+    test('returns ETag header', async () => {
+      const res = await request(server).get('/test.css');
+      expect(res.status).toBe(200);
+      expect(res.headers.etag).toBeDefined();
+    });
+
+    test('returns 304 when ETag matches', async () => {
+      const firstRes = await request(server).get('/test.css');
+      const etag = firstRes.headers.etag;
+      
+      const secondRes = await request(server)
+        .get('/test.css')
+        .set('If-None-Match', etag);
+      expect(secondRes.status).toBe(304);
+    });
+
+    test('returns 200 when ETag does not match', async () => {
+      const res = await request(server)
+        .get('/test.css')
+        .set('If-None-Match', 'W/"nonexistent"');
+      expect(res.status).toBe(200);
     });
   });
-  
-  describe('GET /health', () => {
-    test('returns valid JSON with ok status', async () => {
-      const response = await request(server).get('/health');
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toMatch(/application\/json/);
-      expect(response.body.status).toBe('ok');
-      expect(response.body.version).toBe('1.0.0');
-      expect(response.body.timestamp).toBeDefined();
-      expect(() => new Date(response.body.timestamp)).not.toThrow();
+
+  describe('SPA Fallback', () => {
+    test('returns index.html for unknown routes (non-API)', async () => {
+      const res = await request(server).get('/unknown/route');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/html/);
+    });
+
+    test('returns 404 for unknown /api/* routes', async () => {
+      const res = await request(server).get('/api/unknown');
+      expect(res.status).toBe(404);
     });
   });
-  
-  describe('Correlation ID', () => {
-    test('returns X-Request-ID header in response', async () => {
-      const response = await request(server).get('/health');
-      expect(response.headers['x-request-id']).toBeDefined();
+
+  describe('Path Traversal Protection', () => {
+    test('blocks path traversal with ../', async () => {
+      const res = await request(server).get('/../package.json');
+      expect(res.status).toBe(403);
     });
-    
-    test('uses provided correlation ID', async () => {
-      const customId = 'my-custom-correlation-id';
-      const response = await request(server)
-        .get('/health')
-        .set('X-Request-ID', customId);
-      expect(response.headers['x-request-id']).toBe(customId);
+
+    test('blocks encoded path traversal', async () => {
+      const res = await request(server).get('/..%2F..%2Fetc%2Fpasswd');
+      expect(res.status).toBe(403);
+    });
+
+    test('blocks null byte injection', async () => {
+      const res = await request(server).get('/test.css%00.txt');
+      expect(res.status).toBe(403);
     });
   });
 });

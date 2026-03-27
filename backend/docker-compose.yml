@@ -1,27 +1,15 @@
 version: '3.8'
-
 services:
-  static-server:
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-    volumes:
-      - ./public:/app/public:ro
-      - /tmp:/tmp:rw
+      NODE_ENV: production
+      PORT: 3000
     read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
