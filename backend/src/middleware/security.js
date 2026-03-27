@@ -1,48 +1,58 @@
-const path = require('path');
-
-class PathTraversalError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'PathTraversalError';
-    this.statusCode = 403;
-  }
-}
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 /**
- * Middleware to prevent path traversal attacks
- * Must be registered BEFORE express.static
+ * Security middleware configuration
+ * - Helmet: Security headers
+ * - CORS: Cross-origin resource sharing
+ * - Rate limiting: Prevent abuse
  */
-function pathTraversalMiddleware(req, res, next) {
-  const requestedPath = req.params.staticPath;
-  
-  // Skip if no staticPath parameter (e.g., root path /)
-  if (!requestedPath) {
-    return next();
-  }
-  
-  // Check for null bytes
-  if (requestedPath.includes('\0') || requestedPath.includes('\x00')) {
-    return next(new PathTraversalError('Invalid path: null bytes not allowed'));
-  }
-  
-  // Check for absolute paths
-  if (path.isAbsolute(requestedPath)) {
-    return next(new PathTraversalError('Invalid path: absolute paths not allowed'));
-  }
-  
-  // Normalize and check for traversal attempts
-  const normalized = path.normalize(requestedPath);
-  if (normalized.includes('..')) {
-    return next(new PathTraversalError('Invalid path: traversal detected'));
-  }
-  
-  // Additional check: ensure no decoded traversal
-  const decoded = decodeURIComponent(requestedPath);
-  if (decoded !== requestedPath && decoded.includes('..')) {
-    return next(new PathTraversalError('Invalid path: traversal detected'));
-  }
-  
-  next();
-}
 
-module.exports = { pathTraversalMiddleware, PathTraversalError };
+/**
+ * Configure Helmet security headers
+ */
+const helmetMiddleware = helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: []
+    }
+  },
+  crossOriginEmbedderPolicy: false
+});
+
+/**
+ * Configure CORS
+ */
+const corsMiddleware = cors({
+  origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : '*',
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
+});
+
+/**
+ * Rate limiting middleware
+ * 100 requests per minute per IP
+ */
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests, please try again later',
+    code: 'RATE_LIMIT_EXCEEDED'
+  }
+});
+
+module.exports = {
+  helmetMiddleware,
+  corsMiddleware,
+  limiter
+};

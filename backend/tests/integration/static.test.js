@@ -20,15 +20,14 @@ const cssContent = 'body { color: red; }';
 fs.writeFileSync(path.join(fixturesDir, 'index.html'), indexContent);
 fs.writeFileSync(path.join(fixturesDir, 'style.css'), cssContent);
 
-// Import app
-const { config } = require('../../src/config');
-const app = require('../../src/server');
+// Import createApp from app.js
+const { createApp } = require('../../src/app');
 
-// Get server instance
 let server;
 let baseUrl;
 
 beforeAll(async () => {
+  const app = createApp();
   server = app.listen(0);
   const addr = server.address();
   baseUrl = `http://localhost:${addr.port}`;
@@ -58,7 +57,7 @@ describe('Static File Server Integration Tests', () => {
       expect(response.text).toContain('Hello World');
     });
   });
-  
+
   describe('GET /style.css', () => {
     test('returns CSS with correct Content-Type', async () => {
       const response = await request(server).get('/style.css');
@@ -67,25 +66,25 @@ describe('Static File Server Integration Tests', () => {
       expect(response.text).toBe('body { color: red; }');
     });
   });
-  
+
   describe('GET /nonexistent', () => {
     test('returns 404', async () => {
       const response = await request(server).get('/nonexistent');
       expect(response.status).toBe(404);
       expect(response.body.error).toBeDefined();
-      expect(response.body.error.correlationId).toBeDefined();
+      expect(response.body.correlationId).toBeDefined();
     });
   });
-  
+
   describe('GET /../package.json', () => {
     test('returns 403 for path traversal attempt', async () => {
       const response = await request(server).get('/../package.json');
       expect(response.status).toBe(403);
-      expect(response.body.error.name).toBe('PathTraversalError');
-      expect(response.body.error.correlationId).toBeDefined();
+      expect(response.body.error).toBeDefined();
+      expect(response.body.correlationId).toBeDefined();
     });
   });
-  
+
   describe('GET /health', () => {
     test('returns valid JSON with ok status', async () => {
       const response = await request(server).get('/health');
@@ -94,22 +93,24 @@ describe('Static File Server Integration Tests', () => {
       expect(response.body.status).toBe('ok');
       expect(response.body.version).toBe('1.0.0');
       expect(response.body.timestamp).toBeDefined();
+      expect(response.body.correlationId).toBeDefined();
       expect(() => new Date(response.body.timestamp)).not.toThrow();
     });
   });
-  
+
   describe('Correlation ID', () => {
     test('returns X-Request-ID header in response', async () => {
       const response = await request(server).get('/health');
       expect(response.headers['x-request-id']).toBeDefined();
     });
-    
+
     test('uses provided correlation ID', async () => {
       const customId = 'my-custom-correlation-id';
       const response = await request(server)
         .get('/health')
         .set('X-Request-ID', customId);
       expect(response.headers['x-request-id']).toBe(customId);
+      expect(response.body.correlationId).toBe(customId);
     });
   });
 });

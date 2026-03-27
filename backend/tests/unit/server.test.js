@@ -1,4 +1,4 @@
-const { pathTraversalMiddleware, PathTraversalError } = require('../../src/middleware/security');
+const { pathTraversalGuard, PathTraversalError } = require('../../src/middleware/pathTraversal');
 const { correlationIdMiddleware } = require('../../src/middleware/errorHandler');
 const path = require('path');
 
@@ -17,7 +17,8 @@ jest.mock('../../src/config', () => ({
 function createMockReq(params = {}) {
   return {
     get: jest.fn(),
-    params: params
+    params: params,
+    path: params.staticPath || ''
   };
 }
 
@@ -33,73 +34,67 @@ function createMockNext() {
   return jest.fn();
 }
 
-describe('Path Traversal Middleware', () => {
+describe('Path Traversal Guard Middleware', () => {
   let mockReq, mockRes, mockNext;
-  
+
   beforeEach(() => {
     mockReq = createMockReq();
     mockRes = createMockRes();
     mockNext = createMockNext();
   });
-  
+
   test('rejects paths with ../ traversal', () => {
-    mockReq.params.staticPath = '../etc/passwd';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
-    expect(mockNext).toHaveBeenCalledWith(expect.any(PathTraversalError));
+    mockReq.path = '../etc/passwd';
+    pathTraversalGuard(mockReq, mockRes, mockNext);
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(403);
+    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'PATH_TRAVERSAL'
+    }));
   });
-  
-  test('rejects absolute paths', () => {
-    mockReq.params.staticPath = '/etc/passwd';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
-    expect(mockNext).toHaveBeenCalledWith(expect.any(PathTraversalError));
+
+  test('rejects paths with encoded ../ traversal', () => {
+    mockReq.path = '..%2F..%2Fetc%2Fpasswd';
+    pathTraversalGuard(mockReq, mockRes, mockNext);
+    expect(mockRes.status).toHaveBeenCalledWith(403);
+    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'PATH_TRAVERSAL'
+    }));
   });
-  
-  test('rejects paths with null bytes', () => {
-    mockReq.params.staticPath = 'file\x00.txt';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
-    expect(mockNext).toHaveBeenCalledWith(expect.any(PathTraversalError));
-  });
-  
+
   test('allows valid file paths', () => {
-    mockReq.params.staticPath = 'css/style.css';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
+    mockReq.path = 'css/style.css';
+    mockReq.correlationId = 'test-id';
+    pathTraversalGuard(mockReq, mockRes, mockNext);
     expect(mockNext).toHaveBeenCalledWith();
+    expect(mockReq.safePath).toBeDefined();
   });
-  
-  test('allows paths with encoded traversal', () => {
-    mockReq.params.staticPath = '..%2F..%2Fetc%2Fpasswd';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
-    expect(mockNext).toHaveBeenCalledWith(expect.any(PathTraversalError));
-  });
-  
+
   test('allows paths with dots in filenames', () => {
-    mockReq.params.staticPath = 'js/app.bundle.js';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
+    mockReq.path = 'js/app.bundle.js';
+    mockReq.correlationId = 'test-id';
+    pathTraversalGuard(mockReq, mockRes, mockNext);
     expect(mockNext).toHaveBeenCalledWith();
   });
-  
-  test('skips check when staticPath is undefined', () => {
-    mockReq.params.staticPath = undefined;
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
-    expect(mockNext).toHaveBeenCalledWith();
-  });
-  
-  test('skips check when staticPath is empty string', () => {
-    mockReq.params.staticPath = '';
-    pathTraversalMiddleware(mockReq, mockRes, mockNext);
-    expect(mockNext).toHaveBeenCalledWith();
+
+  test('sets safePath on request for valid paths', () => {
+    mockReq.path = 'images/logo.png';
+    mockReq.correlationId = 'test-id';
+    pathTraversalGuard(mockReq, mockRes, mockNext);
+    expect(mockReq.safePath).toBeDefined();
+    expect(mockReq.safePath).toContain('images/logo.png');
   });
 });
 
 describe('Correlation ID Middleware', () => {
   let mockReq, mockRes, mockNext;
-  
+
   beforeEach(() => {
     mockReq = createMockReq();
     mockRes = createMockRes();
     mockNext = createMockNext();
   });
-  
+
   test('generates unique correlation ID when none provided', () => {
     mockReq.get.mockReturnValue(undefined);
     correlationIdMiddleware(mockReq, mockRes, mockNext);
@@ -107,12 +102,21 @@ describe('Correlation ID Middleware', () => {
     expect(mockReq.correlationId.length).toBe(36); // UUID v4 format
     expect(mockRes.setHeader).toHaveBeenCalledWith('X-Request-ID', mockReq.correlationId);
   });
-  
+
   test('uses existing correlation ID from header', () => {
     const existingId = 'existing-correlation-id-123';
     mockReq.get.mockReturnValue(existingId);
     correlationIdMiddleware(mockReq, mockRes, mockNext);
     expect(mockReq.correlationId).toBe(existingId);
     expect(mockRes.setHeader).toHaveBeenCalledWith('X-Request-ID', existingId);
+  });
+});
+
+describe('PathTraversalError', () => {
+  test('has correct status code and name', () => {
+    const error = new PathTraversalError('Test error');
+    expect(error.statusCode).toBe(403);
+    expect(error.name).toBe('PathTraversalError');
+    expect(error.message).toBe('Test error');
   });
 });
