@@ -16,6 +16,7 @@
     "cors": "^2.8.6",
     "dotenv-flow": "^4.1.0",
     "express": "^4.18.2",
+    "express-async-errors": "^3.1.1",
     "express-rate-limit": "^8.3.1",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
@@ -24,22 +25,5 @@
   "devDependencies": {
     "jest": "^29.7.0",
     "supertest": "^6.3.4"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "coverageDirectory": "coverage",
-    "collectCoverageFrom": [
-      "src/**/*.js",
-      "!src/**/*.test.js",
-      "!src/**/__tests__/**"
-    ],
-    "testMatch": [
-      "**/tests/**/*.test.js",
-      "**/tests/**/*.spec.js"
-    ],
-    "modulePathIgnorePatterns": [
-      "<rootDir>/node_modules/"
-    ],
-    "verbose": true
   }
 }

@@ -49,7 +49,7 @@ describe('Health Routes', () => {
       
       expect(mockRes.json).toHaveBeenCalled();
       const responseBody = mockRes.json.mock.calls[0][0];
-      expect(responseBody.status).toBe('ok');
+      expect(responseBody.status).toBe('healthy');
       expect(responseBody.timestamp).toBeDefined();
       expect(responseBody.version).toBe('1.0.0');
       expect(() => new Date(responseBody.timestamp)).not.toThrow();
@@ -78,8 +78,8 @@ describe('Error Handler', () => {
     
     expect(mockRes.status).toHaveBeenCalledWith(404);
     const responseBody = mockRes.json.mock.calls[0][0];
-    expect(responseBody.code).toBe('NOT_FOUND');
-    expect(responseBody.correlationId).toBe('test-correlation-id');
+    expect(responseBody.error.code).toBe('NOT_FOUND');
+    expect(responseBody.error.correlationId).toBe('test-correlation-id');
   });
 
   test('handles ValidationError with 400 status', () => {
@@ -88,7 +88,7 @@ describe('Error Handler', () => {
     
     expect(mockRes.status).toHaveBeenCalledWith(400);
     const responseBody = mockRes.json.mock.calls[0][0];
-    expect(responseBody.code).toBe('VALIDATION_ERROR');
+    expect(responseBody.error.code).toBe('VALIDATION_ERROR');
   });
 
   test('handles InternalError with 500 status', () => {
@@ -97,15 +97,17 @@ describe('Error Handler', () => {
     
     expect(mockRes.status).toHaveBeenCalledWith(500);
     const responseBody = mockRes.json.mock.calls[0][0];
-    expect(responseBody.code).toBe('INTERNAL_ERROR');
+    expect(responseBody.error.code).toBe('INTERNAL_ERROR');
   });
 
-  test('returns timestamp in ISO8601 format', () => {
+  test('returns error object with correct format', () => {
     const error = new NotFoundError('Not found');
     errorHandler(error, mockReq, mockRes, mockNext);
     
     const responseBody = mockRes.json.mock.calls[0][0];
-    expect(responseBody.timestamp).toBeDefined();
-    expect(() => new Date(responseBody.timestamp)).not.toThrow();
+    expect(responseBody.error).toBeDefined();
+    expect(responseBody.error.code).toBe('NOT_FOUND');
+    expect(responseBody.error.message).toBe('Not found');
+    expect(responseBody.error.correlationId).toBe('test-correlation-id');
   });
 });

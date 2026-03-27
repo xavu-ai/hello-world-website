@@ -115,8 +115,9 @@ describe('Correlation ID Middleware', () => {
 describe('PathTraversalError', () => {
   test('has correct status code and name', () => {
     const error = new PathTraversalError('Test error');
-    expect(error.statusCode).toBe(403);
+    expect(error.statusCode).toBe(400);
     expect(error.name).toBe('PathTraversalError');
+    expect(error.code).toBe('PATH_TRAVERSAL');
     expect(error.message).toBe('Test error');
   });
 });

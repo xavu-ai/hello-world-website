@@ -1,5 +1,8 @@
 const { config } = require('../config');
 
+// Re-export PathTraversalError from pathTraversal module
+const { PathTraversalError } = require('./pathTraversal');
+
 class NotFoundError extends Error {
   constructor(message) {
     super(message);
@@ -63,12 +66,13 @@ function errorHandler(err, req, res, _next) {
   const errorCode = err.code || 'INTERNAL_ERROR';
   const errorMessage = err.message || 'An unexpected error occurred';
 
-  // Build error response per plan spec
+  // Build error response per plan spec: {"error":{"code":"ERROR_CODE","message":"...","correlationId":"uuid"}}
   const errorResponse = {
-    error: errorMessage,
-    code: errorCode,
-    correlationId,
-    timestamp
+    error: {
+      code: errorCode,
+      message: errorMessage,
+      correlationId
+    }
   };
 
   res.status(statusCode).json(errorResponse);
@@ -79,5 +83,6 @@ module.exports = {
   correlationIdMiddleware,
   NotFoundError,
   ValidationError,
-  InternalError
+  InternalError,
+  PathTraversalError
 };

@@ -88,14 +88,13 @@ describe('Static File Server Integration Tests', () => {
   });
 
   describe('GET /health', () => {
-    test('returns valid JSON with ok status', async () => {
+    test('returns valid JSON with healthy status', async () => {
       const response = await request(server).get('/health');
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toMatch(/application\/json/);
-      expect(response.body.status).toBe('ok');
+      expect(response.body.status).toBe('healthy');
       expect(response.body.version).toBe('1.0.0');
       expect(response.body.timestamp).toBeDefined();
-      expect(response.body.correlationId).toBeDefined();
       expect(() => new Date(response.body.timestamp)).not.toThrow();
     });
   });

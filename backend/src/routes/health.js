@@ -10,10 +10,9 @@ const VERSION = '1.0.0';
  */
 router.get('/health', (req, res) => {
   res.json({
-    status: 'ok',
+    status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: VERSION,
-    correlationId: req.correlationId
+    version: VERSION
   });
 });
 

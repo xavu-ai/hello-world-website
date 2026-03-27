@@ -6,7 +6,8 @@ class PathTraversalError extends Error {
   constructor(message) {
     super(message);
     this.name = 'PathTraversalError';
-    this.statusCode = 403;
+    this.statusCode = 400;
+    this.code = 'PATH_TRAVERSAL';
   }
 }
 
