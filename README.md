@@ -7,18 +7,14 @@ A simple "Hello World" website with a static file server backend.
 ```
 hello-world-website/
 ├── backend/
-│   ├── server.js         # Static file server
+│   ├── index.js          # Express static file server
 │   ├── package.json
-│   ├── playwright.config.js
 │   └── tests/
-│       ├── server.test.js
-│       └── e2e.test.js
+│       └── server.test.js
 ├── public/               # Static files served by backend
 │   ├── index.html
-│   ├── css/
-│   │   └── styles.css
-│   └── js/
-│       └── app.js
+│   ├── styles.css
+│   └── app.js
 ├── Dockerfile           # Multi-stage build for production
 ├── docker-compose.yml   # Local development
 └── README.md
@@ -59,41 +55,6 @@ npm install
 npm test
 ```
 
-### E2E Smoke Tests
-
-E2E tests use Playwright to verify the full application stack in a browser.
-
-**Prerequisites:**
-```bash
-cd backend
-npm install
-npx playwright install chromium
-```
-
-**Run E2E tests:**
-```bash
-# Start the application (Docker)
-docker compose up -d
-
-# Run Playwright E2E tests from host
-npx playwright test
-```
-
-**Or run inside Docker:**
-```bash
-docker compose up -d
-docker compose run --rm backend npx playwright test
-```
-
-**Test coverage:**
-- Page loads without JavaScript errors
-- Page title is "Hello World"
-- Heading "#greeting" is visible and centered
-- Date/time display "#timestamp" is populated on load
-- No 404 errors for CSS or JS resources
-- Layout renders correctly at 375px viewport width (mobile)
-- Static CSS and JS files return HTTP 200
-
 ### Environment Variables
 
 | Variable   | Default | Description              |
@@ -107,8 +68,8 @@ docker compose run --rm backend npx playwright test
 |------------|--------|--------------------------------|
 | `/`        | GET    | Serves index.html              |
 | `/health`  | GET    | Health check endpoint          |
-| `/css/styles.css` | GET | Serves CSS stylesheet         |
-| `/js/app.js`  | GET  | Serves JavaScript file         |
+| `/styles.css` | GET | Serves CSS stylesheet         |
+| `/app.js`  | GET    | Serves JavaScript file         |
 
 ## Production Deployment
 
