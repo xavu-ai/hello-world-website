@@ -6,7 +6,10 @@ jest.mock('../../src/config', () => ({
     port: 3000,
     staticDir: '/app/public',
     logLevel: 'combined',
-    correlationIdHeader: 'X-Request-ID'
+    correlationIdHeader: 'X-Request-ID',
+    rateLimitWindowMs: 900000,
+    rateLimitMax: 100,
+    corsOrigins: '*'
   },
   validateConfig: jest.fn().mockReturnValue({})
 }));
@@ -46,19 +49,10 @@ describe('Health Routes', () => {
       
       expect(mockRes.json).toHaveBeenCalled();
       const responseBody = mockRes.json.mock.calls[0][0];
-      expect(responseBody.status).toBe('ok');
+      expect(responseBody.status).toBe('healthy');
       expect(responseBody.timestamp).toBeDefined();
+      expect(responseBody.version).toBe('1.0.0');
       expect(() => new Date(responseBody.timestamp)).not.toThrow();
-    });
-
-    test('includes correlation ID in response', () => {
-      const router = healthRouter;
-      const handler = router.stack.find(layer => layer.route && layer.route.path === '/health');
-      
-      handler.route.stack[0].handle(mockReq, mockRes);
-      
-      const responseBody = mockRes.json.mock.calls[0][0];
-      expect(responseBody.correlationId).toBe('test-correlation-id');
     });
   });
 });

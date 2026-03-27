@@ -19,7 +19,12 @@ const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   staticDir: process.env.STATIC_DIR || path.resolve(__dirname, '../../public'),
   logLevel: process.env.LOG_LEVEL || 'combined',
-  correlationIdHeader: 'X-Request-ID'
+  correlationIdHeader: 'X-Request-ID',
+  // Rate limiting from env
+  rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
+  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+  // CORS
+  corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : '*'
 };
 
 // Validate required configuration

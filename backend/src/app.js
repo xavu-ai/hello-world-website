@@ -3,6 +3,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs').promises;
 
 const { config } = require('./config');
 const { pathTraversalGuard } = require('./middleware/pathTraversal');
@@ -13,40 +14,54 @@ const healthRouter = require('./routes/health');
 /**
  * Express app factory - creates and configures the application
  * @returns {express.Application} Configured Express app
+ * 
+ * Middleware order (per plan):
+ * 1. correlation ID → 2. rate limiter → 3. path traversal → 
+ * 4. security headers → 5. compression → 6. static files → 
+ * 7. SPA fallback → 8. error handler
  */
 function createApp() {
   const app = express();
 
-  // 1. Security middleware FIRST
-  app.use(helmetMiddleware);
-  app.use(corsMiddleware);
-  app.use(limiter);
-
-  // 2. Correlation ID for request tracking
+  // 1. Correlation ID for request tracking
   app.use(correlationIdMiddleware);
 
-  // 3. HTTP logging
+  // 2. Rate limiter
+  app.use(limiter);
+
+  // 3. Path traversal guard - global middleware for all routes
+  app.use(pathTraversalGuard);
+
+  // 4. Security headers (Helmet + CORS)
+  app.use(helmetMiddleware);
+  app.use(corsMiddleware);
+
+  // 5. Compression
+  app.use(compression());
+
+  // 6. Parse URL-encoded bodies (for form submissions)
+  app.use(express.urlencoded({ extended: true }));
+
+  // 7. HTTP logging (skip health endpoint)
   app.use(morgan(config.logLevel, {
     skip: (req) => req.url === '/health'
   }));
 
-  // 4. Compression
-  app.use(compression());
-
-  // 5. Parse URL-encoded bodies (for form submissions)
-  app.use(express.urlencoded({ extended: true }));
-
-  // 6. Path traversal guard - global middleware for all routes
-  app.use(pathTraversalGuard);
-
-  // 7. Health check endpoint (before static routes)
+  // 8. Health check endpoint (before static routes)
   app.use(healthRouter);
 
-  // 8. Static file serving with explicit 404 handling
-  // Uses :staticPath route to properly handle missing files with 404
-  app.get('/:staticPath', async (req, res, next) => {
-    const requestedFile = req.params.staticPath;
-    const filePath = path.join(config.staticDir, requestedFile);
+  // 9. Root path - serve index.html directly
+  app.get('/', (req, res) => {
+    const indexPath = path.resolve(config.staticDir, 'index.html');
+    res.sendFile(indexPath);
+  });
+
+  // 10. Static file serving with ETag support and SPA fallback
+  // Serves files from public/ with proper MIME types
+  // Falls back to index.html for non-API routes (SPA support)
+  app.get('/:path(*)', async (req, res, next) => {
+    const requestedPath = req.params.path;
+    const filePath = path.join(config.staticDir, requestedPath);
 
     // Verify the resolved path is within static directory
     const resolvedPath = path.resolve(filePath);
@@ -63,35 +78,34 @@ function createApp() {
 
     // Check if file exists
     try {
-      await require('fs').promises.access(filePath);
-      res.sendFile(filePath);
-    } catch {
-      // File doesn't exist - trigger 404
-      next(new NotFoundError(`File not found: ${requestedFile}`));
-    }
-  });
-
-  // 9. Root path - serve index.html
-  app.get('/', (req, res) => {
-    const indexPath = path.resolve(config.staticDir, 'index.html');
-    res.sendFile(indexPath);
-  });
-
-  // 10. SPA fallback for client-side routing
-  // Only for non-API, non-static paths that reached here
-  app.use(async (req, res, next) => {
-    // Skip API routes and health check
-    if (req.path.startsWith('/api') || req.path === '/health') {
-      return next();
-    }
-
-    try {
-      const indexPath = path.resolve(config.staticDir, 'index.html');
-      await require('fs').promises.access(indexPath);
-      res.setHeader('Content-Type', 'text/html');
-      res.sendFile(indexPath);
+      const stats = await fs.stat(resolvedPath);
+      
+      // Generate ETag
+      const etag = `W/"${stats.size}-${stats.mtime.getTime()}"`;
+      res.setHeader('ETag', etag);
+      
+      // Check If-None-Match for 304
+      const ifNoneMatch = req.get('If-None-Match');
+      if (ifNoneMatch && ifNoneMatch === etag) {
+        return res.status(304).end();
+      }
+      
+      res.sendFile(resolvedPath);
     } catch (err) {
-      next(err);
+      // File doesn't exist - SPA fallback for non-API routes
+      if (req.path.startsWith('/api')) {
+        return next(new NotFoundError(`File not found: ${requestedPath}`));
+      }
+      
+      // Serve index.html for SPA fallback
+      const indexPath = path.resolve(config.staticDir, 'index.html');
+      try {
+        await fs.access(indexPath);
+        res.setHeader('Content-Type', 'text/html');
+        res.sendFile(indexPath);
+      } catch {
+        next(err);
+      }
     }
   });
 
