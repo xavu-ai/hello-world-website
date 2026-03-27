@@ -5,7 +5,7 @@ COPY package*.json ./
 RUN npm install --only=production && npm cache clean --force
 
 # Stage 2: Production
-FROM node:20-alpine-slim AS production
+FROM node:20-alpine AS production
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 WORKDIR /app
 

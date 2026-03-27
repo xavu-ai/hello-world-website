@@ -7,45 +7,77 @@ A simple "Hello World" website with a static file server backend.
 ```
 hello-world-website/
 ├── backend/
-│   ├── index.js          # Express static file server
-│   ├── package.json
-│   └── tests/
-│       └── server.test.js
-├── public/               # Static files served by backend
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
-├── Dockerfile           # Multi-stage build for production
-├── docker-compose.yml   # Local development
+│   ├── src/                 # Express server source
+│   │   ├── app.js          # Express app factory
+│   │   ├── server.js       # Server entry point
+│   │   ├── config/         # Configuration
+│   │   ├── middleware/     # Express middleware
+│   │   └── routes/         # API routes
+│   ├── public/             # Static files served by backend
+│   │   ├── index.html
+│   │   ├── css/styles.css
+│   │   └── js/app.js
+│   ├── tests/              # Jest tests
+│   │   ├── unit/
+│   │   └── integration/
+│   ├── Dockerfile
+│   └── package.json
+├── docker-compose.yml
 └── README.md
 ```
 
-## Quick Start
+## How to Run
 
-### Option 1: Run with Node.js
+### Prerequisites
+- Docker & Docker Compose
+- Node.js 18+ (for local development)
+
+### Quick Start (Docker)
 
 ```bash
+git clone https://github.com/xavu-ai/hello-world-website.git
+cd hello-world-website
+git checkout feature/TEST-001-hello-world-site
+docker compose up --build
+```
+
+Access the application:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3000/health
+
+### Verify Installation
+
+```bash
+# Run smoke tests
+curl http://localhost:3000 | grep "Hello World"
+curl http://localhost:3000/health
+```
+
+### Common Issues
+
+**CORS errors in browser console?**
+Ensure `CORS_ORIGINS` env var is set correctly in backend.
+
+**Port already in use?**
+Change ports in `docker-compose.yml` or stop existing services:
+```bash
+docker compose down
+lsof -ti:3000 | xargs kill -9
+```
+
+**Container not starting?**
+Check container logs: `docker compose logs backend`
+
+### Development (without Docker)
+
+```bash
+# Terminal 1 - Backend
 cd backend
 npm install
-npm start
+npm run dev
+
+# Open browser to http://localhost:3000
 ```
-
-Server will be available at http://localhost:3000
-
-### Option 2: Run with Docker
-
-```bash
-docker compose up
-```
-
-Or for production build:
-
-```bash
-docker compose -f docker-compose.yml build
-docker compose -f docker-compose.yml up -d
-```
-
-## Development
 
 ### Running Tests
 
@@ -55,21 +87,24 @@ npm install
 npm test
 ```
 
-### Environment Variables
-
-| Variable   | Default | Description              |
-|------------|---------|--------------------------|
-| `PORT`     | 3000    | Server port              |
-| `NODE_ENV` | production | Environment mode      |
-
 ## Endpoints
 
 | Endpoint   | Method | Description                    |
 |------------|--------|--------------------------------|
 | `/`        | GET    | Serves index.html              |
 | `/health`  | GET    | Health check endpoint          |
-| `/styles.css` | GET | Serves CSS stylesheet         |
-| `/app.js`  | GET    | Serves JavaScript file         |
+| `/css/*`   | GET    | Serves CSS stylesheets        |
+| `/js/*`    | GET    | Serves JavaScript files       |
+
+## Environment Variables
+
+| Variable              | Default | Description                     |
+|-----------------------|---------|---------------------------------|
+| `PORT`                | 3000    | Server port                    |
+| `NODE_ENV`            | production | Environment mode          |
+| `CORS_ORIGINS`        | *       | Comma-separated CORS origins   |
+| `RATE_LIMIT_WINDOW_MS`| 900000  | Rate limit window (15 min)      |
+| `RATE_LIMIT_MAX`      | 100     | Max requests per window         |
 
 ## Production Deployment
 
@@ -81,6 +116,6 @@ The Dockerfile uses a multi-stage build:
 Build and run:
 
 ```bash
-docker build -t hello-world-website .
+docker build -t hello-world-website ./backend
 docker run -p 3000:3000 hello-world-website
 ```
