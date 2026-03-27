@@ -1,5 +1,5 @@
-const { createApp } = require('./app');
-const { config, validateConfig } = require('./config');
+const { createApp } = require('./src/app');
+const { config, validateConfig } = require('./src/config');
 
 (async () => {
   try {

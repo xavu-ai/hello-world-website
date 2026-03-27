@@ -7,9 +7,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - PUBLIC_DIR=/app/public
+      NODE_ENV: production
+      PORT: 3000
+      STATIC_DIR: /app/public
     read_only: true
     tmpfs:
       - /tmp:noexec,nosuid,size=100m

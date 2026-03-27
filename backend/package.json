@@ -2,10 +2,10 @@
   "name": "hello-world-backend",
   "version": "1.0.0",
   "description": "Static file server for hello-world-website",
-  "main": "src/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node src/server.js",
+    "start": "node server.js",
+    "dev": "node server.js",
     "test": "jest",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
