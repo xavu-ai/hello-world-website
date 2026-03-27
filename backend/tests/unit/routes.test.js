@@ -49,7 +49,7 @@ describe('Health Routes', () => {
       
       expect(mockRes.json).toHaveBeenCalled();
       const responseBody = mockRes.json.mock.calls[0][0];
-      expect(responseBody.status).toBe('healthy');
+      expect(responseBody.status).toBe('ok');
       expect(responseBody.timestamp).toBeDefined();
       expect(responseBody.version).toBe('1.0.0');
       expect(() => new Date(responseBody.timestamp)).not.toThrow();
